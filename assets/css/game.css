@@ -69,6 +69,10 @@
   pointer-events: none;
 }
 
+/* Must-capture flash */
+@keyframes mustFlash{0%,100%{box-shadow:none}25%,75%{box-shadow:0 0 0 3px rgba(239,68,68,.8),0 0 16px rgba(239,68,68,.5)}}
+.must-capture-flash{animation:mustFlash .8s ease-in-out}
+
 /* Pieces */
 .piece {
   width: 78%; height: 78%;

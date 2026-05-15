@@ -3,19 +3,19 @@ require_once __DIR__ . '/../config/app.php';
 requireAuth();
 header('Content-Type: application/json');
 
-$roomCode  = trim($_GET['room_code'] ?? '');
-$since     = (int)($_GET['since'] ?? 0); // Unix timestamp
+$roomCode = trim($_GET['room_code'] ?? '');
+$since = (int) ($_GET['since'] ?? 0);
 
-if (empty($roomCode)) jsonError('Missing room_code');
+if (empty($roomCode))
+    jsonError('Missing room_code');
 
-// Get game (player must be participant)
 $game = Database::queryOne(
     "SELECT id FROM games WHERE room_code = ?",
     [$roomCode]
 );
-if (!$game) jsonError('Game not found', 404);
+if (!$game)
+    jsonError('Game not found', 404);
 
-// Fetch messages since timestamp
 $messages = Database::query(
     "SELECT cm.id, cm.message, cm.created_at,
             u.username,

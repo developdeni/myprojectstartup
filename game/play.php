@@ -190,7 +190,7 @@ let GAME_ID = null; // Will be set after game is created in DB
 const board = new BoardUI('gameBoard', {
     mode: MODE,
     difficulty: DIFFICULTY,
-    playerSide: P1,   // Player always plays as P1 (light, bottom)
+    playerSide: P1,   // Default; for online this is set after joining
     skin: USER_SKIN,
     timeControl: 300,
     hintsEnabled: true,
@@ -198,6 +198,111 @@ const board = new BoardUI('gameBoard', {
     onMove: handleMove,
     onGameOver: handleGameOver,
 });
+
+// ======================================
+// ONLINE GAME INIT
+// ======================================
+let myPlayerNum = 0;  // 1 or 2
+let onlineSyncInterval = null;
+let lastSyncMoveNum = 0;
+let opponentJoined = false;
+
+if (MODE === 'online' && ROOM_CODE) {
+    initOnlineGame();
+}
+
+async function initOnlineGame() {
+    showStatus('⏳ Подключаемся...');
+    try {
+        const res = await fetch('../api/join_game.php', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ room_code: ROOM_CODE })
+        });
+        const data = await res.json();
+        if (!data.success) { showStatus('❌ Ошибка: ' + data.error); return; }
+
+        myPlayerNum = data.player_num;
+        GAME_ID = data.game_id;
+
+        // Set which side I play
+        board.options.playerSide = myPlayerNum === 1 ? P1 : P2;
+
+        if (data.status === 'active') {
+            opponentJoined = true;
+            board.startTimer();
+            showStatus(myPlayerNum === 1 ? 'Ваш ход ♟' : 'Ход соперника');
+        } else {
+            showStatus('⏳ Ждём соперника...');
+        }
+
+        // Start polling
+        syncGameState();
+        onlineSyncInterval = setInterval(syncGameState, 1500);
+
+    } catch(e) {
+        showStatus('❌ Ошибка подключения');
+    }
+}
+
+async function syncGameState() {
+    if (!ROOM_CODE || board.engine.gameOver) return;
+    try {
+        const res = await fetch(`../api/game_sync.php?room_code=${ROOM_CODE}&since=${lastSyncMoveNum}`);
+        const data = await res.json();
+        if (!data.success) return;
+
+        // Opponent joined for first time
+        if (data.player2_id && !opponentJoined) {
+            opponentJoined = true;
+            board.startTimer();
+            showStatus(myPlayerNum === 1 ? 'Соперник подключился! Ваш ход ♟' : 'Подключено! Ход соперника');
+            board.showToast('✅ Соперник вошёл в игру!');
+        }
+
+        // Apply new moves from opponent
+        if (data.moves && data.moves.length > 0) {
+            for (const item of data.moves) {
+                // Only apply moves we didn't make ourselves
+                const isMyMove = (myPlayerNum === 1 && item.move_number % 2 === 1) ||
+                                 (myPlayerNum === 2 && item.move_number % 2 === 0);
+                if (!isMyMove) {
+                    board.engine.applyMove(item.move);
+                    board.lastMove = item.move;
+                    board.updateSidebars(item.move);
+                }
+                lastSyncMoveNum = Math.max(lastSyncMoveNum, item.move_number);
+            }
+            board.selected = null;
+            board.possibleMoves = [];
+            board.render();
+
+            if (board.engine.gameOver) {
+                clearInterval(onlineSyncInterval);
+                board.handleGameOver();
+                return;
+            }
+        }
+
+        // Update status text
+        if (opponentJoined && !board.engine.gameOver) {
+            const isMyTurn = (data.current_turn === myPlayerNum);
+            const statusEl = document.getElementById('gameStatus');
+            const mStatusEl = document.getElementById('mobileStatus');
+            const txt = isMyTurn ? 'Ваш ход ♟' : 'Ход соперника...';
+            if (statusEl) statusEl.textContent = txt;
+            if (mStatusEl) mStatusEl.textContent = txt;
+        }
+
+    } catch(e) { /* silent */ }
+}
+
+function showStatus(msg) {
+    const el = document.getElementById('gameStatus');
+    const m = document.getElementById('mobileStatus');
+    if (el) el.textContent = msg;
+    if (m) m.textContent = msg;
+}
 
 // Patch renderTimers to also update mobile bar
 const _origRenderTimers = board.renderTimers.bind(board);
@@ -214,15 +319,25 @@ board.renderTimers = function() {
 };
 
 function handleMove(move, engine) {
-    const statusText = engine.gameOver ? '' :
-        (engine.turn === P1 ? 'Ваш ход ♟' : (MODE === 'ai' ? 'ИИ думает...' : 'Ход соперника'));
-    const status = document.getElementById('gameStatus');
-    const mStatus = document.getElementById('mobileStatus');
-    if (status) status.textContent = statusText;
-    if (mStatus) mStatus.textContent = statusText;
+    // Update status (online status is managed by syncGameState)
+    if (MODE !== 'online') {
+        const txt = engine.gameOver ? '' :
+            (engine.turn === P1 ? 'Ваш ход ♟' : (MODE === 'ai' ? 'ИИ думает...' : 'Ход соперника'));
+        showStatus(txt);
+    }
 
-    // Save move to server (only if logged in and game exists)
-    if (USER_ID && GAME_ID) {
+    // Online: send move to server
+    if (MODE === 'online' && ROOM_CODE) {
+        lastSyncMoveNum++; // Optimistic update to avoid re-applying our own move
+        fetch('../api/online_move.php', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ room_code: ROOM_CODE, move })
+        }).catch(() => {});
+    }
+
+    // AI/PvP: save move if logged in
+    if (MODE !== 'online' && USER_ID && GAME_ID) {
         fetch('../api/save_move.php', {
             method: 'POST',
             headers: {'Content-Type':'application/json'},
@@ -230,6 +345,7 @@ function handleMove(move, engine) {
         }).catch(() => {});
     }
 }
+
 
 function handleGameOver(engine) {
     const modal = document.getElementById('gameOverModal');

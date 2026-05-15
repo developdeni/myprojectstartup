@@ -27,7 +27,10 @@ class BoardUI {
 
         this.sounds = this.initSounds();
         this.render();
-        this.startTimer();
+        // For online mode, timer starts only after opponent joins
+        if (this.options.mode !== 'online') {
+            this.startTimer();
+        }
     }
 
     initSounds() {
@@ -97,15 +100,32 @@ class BoardUI {
 
     handleCellClick(r, c) {
         if (this.engine.gameOver || this.aiThinking) return;
+
+        // AI mode: block clicks when it's AI's turn
         if (this.options.mode === 'ai' && this.engine.turn !== this.options.playerSide) return;
-        if (this.options.mode === 'online') return; // handled by WS
+
+        // Online mode: block if it's opponent's turn
+        if (this.options.mode === 'online') {
+            const myTurn = this.options.playerSide === this.engine.turn;
+            if (!myTurn) {
+                this.showToast('Подожди — ход соперника!');
+                return;
+            }
+        }
 
         const v = this.engine.board[r][c];
 
         // Clicked own piece → select
         if (this.engine.isOwn(v, this.engine.turn)) {
+            const moves = this.engine.getMovesFrom(r, c);
+            if (moves.length === 0 && this.engine.mustCapture) {
+                // This piece can't move - mandatory capture elsewhere
+                this.showToast('⚠️ Взятие обязательно! Выбери другую шашку');
+                this.flashMustCapturePieces();
+                return;
+            }
             this.selected = [r, c];
-            this.possibleMoves = this.engine.getMovesFrom(r, c);
+            this.possibleMoves = moves;
             this.render();
             return;
         }
@@ -123,6 +143,35 @@ class BoardUI {
         this.selected = null;
         this.possibleMoves = [];
         this.render();
+    }
+
+    /** Show a brief toast notification on the board */
+    showToast(msg) {
+        let toast = document.getElementById('boardToast');
+        if (!toast) {
+            toast = document.createElement('div');
+            toast.id = 'boardToast';
+            toast.style.cssText = 'position:fixed;bottom:120px;left:50%;transform:translateX(-50%);background:rgba(20,20,30,.95);border:1px solid rgba(124,106,247,.4);color:#e8e8f0;padding:10px 20px;border-radius:100px;font-size:.88rem;font-weight:600;z-index:200;pointer-events:none;transition:opacity .3s';
+            document.body.appendChild(toast);
+        }
+        toast.textContent = msg;
+        toast.style.opacity = '1';
+        clearTimeout(this._toastTimer);
+        this._toastTimer = setTimeout(() => { toast.style.opacity = '0'; }, 2200);
+    }
+
+    /** Flash pieces that MUST capture */
+    flashMustCapturePieces() {
+        const all = this.engine.getAllMoves();
+        const fromSet = new Set(all.map(m => `${m.from[0]}-${m.from[1]}`));
+        fromSet.forEach(key => {
+            const [r, c] = key.split('-').map(Number);
+            const cell = document.getElementById(`cell-${r}-${c}`);
+            if (cell) {
+                cell.classList.add('must-capture-flash');
+                setTimeout(() => cell.classList.remove('must-capture-flash'), 800);
+            }
+        });
     }
 
     executeMove(move) {
