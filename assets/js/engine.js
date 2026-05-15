@@ -36,8 +36,9 @@ class CheckersEngine {
 
     getAllMoves() {
         const caps = this._allCaptures(this.turn);
-        this.mustCapture = caps.length > 0;
-        return caps.length > 0 ? caps : this._allSimple(this.turn);
+        const simple = this._allSimple(this.turn);
+        this.mustCapture = false; // Disabled by user request
+        return [...caps, ...simple];
     }
 
     getMovesFrom(r, c) {
