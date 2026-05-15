@@ -1,7 +1,8 @@
 <?php
 require_once __DIR__ . '/../config/app.php';
-requireAuth();
 header('Content-Type: application/json');
+if (!isLoggedIn()) jsonError('Not authenticated', 401);
+
 
 $data = json_decode(file_get_contents('php://input'), true);
 $roomCode = trim($data['room_code'] ?? '');

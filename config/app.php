@@ -19,10 +19,21 @@ function isLoggedIn(): bool {
 
 function requireAuth(): void {
     if (!isLoggedIn()) {
+        // If this is an API request, return JSON error
+        if (
+            isset($_SERVER['HTTP_ACCEPT']) && str_contains($_SERVER['HTTP_ACCEPT'], 'application/json') ||
+            isset($_SERVER['HTTP_X_REQUESTED_WITH'])
+        ) {
+            http_response_code(401);
+            header('Content-Type: application/json');
+            echo json_encode(['success' => false, 'error' => 'Not authenticated']);
+            exit;
+        }
         header('Location: ' . APP_URL . '/auth/login.php');
         exit;
     }
 }
+
 
 function getCurrentUser(): ?array {
     if (!isLoggedIn()) return null;

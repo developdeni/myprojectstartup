@@ -2,6 +2,7 @@
 /**
  * api/game_sync.php
  * Returns moves since a given move_number for an online game.
+ * Public endpoint — no auth required (anyone with room code can observe).
  */
 require_once __DIR__ . '/../config/app.php';
 header('Content-Type: application/json');
@@ -11,24 +12,33 @@ $since    = (int)($_GET['since'] ?? 0);
 
 if (empty($roomCode)) jsonError('Missing room_code');
 
-$game = Database::queryOne("SELECT * FROM games WHERE room_code = ?", [$roomCode]);
+try {
+    $game = Database::queryOne("SELECT * FROM games WHERE room_code = ?", [$roomCode]);
+} catch (Exception $e) {
+    jsonError('DB error: ' . $e->getMessage(), 500);
+}
+
 if (!$game) jsonError('Game not found', 404);
 
 // Fetch moves since last known move_number
-$rows = Database::query(
-    "SELECT move_number, player_id, from_row, from_col, to_row, to_col, captures
-     FROM moves
-     WHERE game_id = ? AND move_number > ?
-     ORDER BY move_number ASC",
-    [$game['id'], $since]
-);
+try {
+    $rows = Database::query(
+        "SELECT move_number, player_id, from_row, from_col, to_row, to_col, captures
+         FROM moves
+         WHERE game_id = ? AND move_number > ?
+         ORDER BY move_number ASC",
+        [$game['id'], $since]
+    );
+} catch (Exception $e) {
+    jsonError('DB error reading moves: ' . $e->getMessage(), 500);
+}
 
 // Convert DB rows to JS move objects
 $moves = array_map(function($r) {
     return [
         'move_number' => (int)$r['move_number'],
         'player_id'   => (int)$r['player_id'],
-        'move'        => [
+        'move' => [
             'from'     => [(int)$r['from_row'], (int)$r['from_col']],
             'to'       => [(int)$r['to_row'],   (int)$r['to_col']],
             'captures' => json_decode($r['captures'] ?? '[]', true) ?: [],
@@ -36,7 +46,14 @@ $moves = array_map(function($r) {
     ];
 }, $rows);
 
-$totalMoves  = (int)Database::queryOne("SELECT COUNT(*) as c FROM moves WHERE game_id=?", [$game['id']])['c'];
+try {
+    $totalMoves = (int)Database::queryOne(
+        "SELECT COUNT(*) as c FROM moves WHERE game_id = ?", [$game['id']]
+    )['c'];
+} catch (Exception $e) {
+    $totalMoves = 0;
+}
+
 $currentTurn = ($totalMoves % 2 === 0) ? 1 : 2;
 
 jsonSuccess([

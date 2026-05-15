@@ -4,8 +4,9 @@
  * Save a move for an online game, validate it's the correct player's turn.
  */
 require_once __DIR__ . '/../config/app.php';
-requireAuth();
 header('Content-Type: application/json');
+
+if (!isLoggedIn()) jsonError('Not authenticated', 401);
 
 $data = json_decode(file_get_contents('php://input'), true);
 $roomCode = trim($data['room_code'] ?? '');
@@ -46,7 +47,5 @@ Database::execute(
         json_encode($captures)
     ]
 );
-
-Database::execute("UPDATE games SET updated_at = NOW() WHERE id = ?", [$game['id']]);
 
 jsonSuccess(['move_number' => $moveCount + 1, 'turn' => $isP1Turn ? 2 : 1]);
