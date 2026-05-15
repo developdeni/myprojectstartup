@@ -40,7 +40,9 @@ if ($roomCode) {
     <div style="display:flex;gap:8px;align-items:center">
         <button class="btn btn-ghost" id="btnHints" onclick="toggleHints()" title="Подсказки">💡</button>
         <button class="btn btn-ghost" id="btnSound" onclick="toggleSound()" title="Звук">🔊</button>
+        <?php if ($mode !== 'online'): ?>
         <button class="btn btn-ghost" onclick="board.reset()" title="Новая игра">↺</button>
+        <?php endif; ?>
         <?php if ($user): ?><a href="../profile/index.php" class="btn btn-ghost"><?= strtoupper(substr($user['username'],0,1)) ?></a><?php endif; ?>
     </div>
 </header>
@@ -263,10 +265,8 @@ async function syncGameState() {
         // Apply new moves from opponent
         if (data.moves && data.moves.length > 0) {
             for (const item of data.moves) {
-                // Only apply moves we didn't make ourselves
-                const isMyMove = (myPlayerNum === 1 && item.move_number % 2 === 1) ||
-                                 (myPlayerNum === 2 && item.move_number % 2 === 0);
-                if (!isMyMove) {
+                // If this move is newer than our local history, apply it
+                if (item.move_number > board.engine.moveHistory.length) {
                     board.engine.applyMove(item.move);
                     board.lastMove = item.move;
                     board.updateSidebars(item.move);
