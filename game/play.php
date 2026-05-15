@@ -42,6 +42,8 @@ if ($roomCode) {
         <button class="btn btn-ghost" id="btnSound" onclick="toggleSound()" title="Звук">🔊</button>
         <?php if ($mode !== 'online'): ?>
         <button class="btn btn-ghost" onclick="board.reset()" title="Новая игра">↺</button>
+        <?php else: ?>
+        <button class="btn btn-ghost" onclick="surrenderGame()" style="color:var(--danger)" title="Сдаться">🏳️</button>
         <?php endif; ?>
         <?php if ($user): ?><a href="../profile/index.php" class="btn btn-ghost"><?= strtoupper(substr($user['username'],0,1)) ?></a><?php endif; ?>
     </div>
@@ -254,6 +256,19 @@ async function syncGameState() {
         const data = await res.json();
         if (!data.success) return;
 
+        // Check for abandoned game
+        if (data.status === 'abandoned' || data.status === 'finished') {
+            clearInterval(onlineSyncInterval);
+            if (!board.engine.gameOver) {
+                board.engine.gameOver = true;
+                // If it's abandoned, the winner is usually current_turn or already set on server.
+                // We'll just set winner to myPlayerNum if it was abandoned (assuming opponent left)
+                board.engine.winner = myPlayerNum === 1 ? P1 : P2; 
+                board.handleGameOver();
+            }
+            return;
+        }
+
         // Opponent joined for first time
         if (data.player2_id && !opponentJoined) {
             opponentJoined = true;
@@ -303,6 +318,25 @@ function showStatus(msg) {
     if (el) el.textContent = msg;
     if (m) m.textContent = msg;
 }
+
+// Surrender logic
+function surrenderGame() {
+    if (confirm('Вы уверены, что хотите сдаться?')) {
+        if (MODE === 'online' && ROOM_CODE) {
+            navigator.sendBeacon('../api/surrender.php', JSON.stringify({ room_code: ROOM_CODE }));
+        }
+        board.engine.gameOver = true;
+        board.engine.winner = myPlayerNum === 1 ? P2 : P1;
+        board.handleGameOver();
+    }
+}
+
+// Surrender on tab close (online mode only)
+window.addEventListener('beforeunload', () => {
+    if (MODE === 'online' && ROOM_CODE && !board.engine.gameOver && opponentJoined) {
+        navigator.sendBeacon('../api/surrender.php', JSON.stringify({ room_code: ROOM_CODE }));
+    }
+});
 
 // Patch renderTimers to also update mobile bar
 const _origRenderTimers = board.renderTimers.bind(board);
