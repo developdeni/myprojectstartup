@@ -39,6 +39,8 @@ class CheckersEngine {
         e.capturedP2 = this.capturedP2;
         e.gameOver = this.gameOver;
         e.winner = this.winner;
+        e.mustCapture = this.mustCapture;
+        e.moveHistory = this.moveHistory.map(m => ({...m}));
         return e;
     }
 
@@ -59,11 +61,12 @@ class CheckersEngine {
         return this.getPieceSimpleMoves(r, c);
     }
 
-    getPieceSimpleMoves(r, c) {
+    getPieceSimpleMoves(r, c, turn) {
+        const t = turn !== undefined ? turn : this.turn;
         const v = this.board[r][c];
         const dirs = this.isKing(v)
             ? [[-1,-1],[-1,1],[1,-1],[1,1]]
-            : [[this.getDir(this.turn), -1],[this.getDir(this.turn), 1]];
+            : [[this.getDir(t), -1],[this.getDir(t), 1]];
         const moves = [];
         for (const [dr, dc] of dirs) {
             const nr = r+dr, nc = c+dc;
@@ -73,9 +76,11 @@ class CheckersEngine {
         return moves;
     }
 
-    getPieceCaptures(r, c, visited = null, boardState = null) {
+    getPieceCaptures(r, c, visited = null, boardState = null, turn = null) {
         const board = boardState || this.board;
+        const t = turn !== null ? turn : this.turn;
         const v = board[r][c];
+        if (!v) return [];
         const dirs = [[-1,-1],[-1,1],[1,-1],[1,1]];
         const captures = [];
         const vis = visited || new Set();
@@ -85,7 +90,9 @@ class CheckersEngine {
             const lr = r+2*dr, lc = c+2*dc; // landing pos
             if (er<0||er>=8||ec<0||ec>=8||lr<0||lr>=8||lc<0||lc>=8) continue;
             const enemyV = board[er][ec];
-            if (!this.isEnemy(enemyV, this.turn)) continue;
+            // Use explicit turn for enemy check
+            const isEnemy = t === P1 ? (enemyV === P2 || enemyV === K2) : (enemyV === P1 || enemyV === K1);
+            if (!isEnemy) continue;
             if (board[lr][lc] !== EMPTY) continue;
             const key = `${er},${ec}`;
             if (vis.has(key)) continue;
@@ -98,7 +105,7 @@ class CheckersEngine {
             const newVis = new Set(vis);
             newVis.add(key);
 
-            const further = this.getPieceCaptures(lr, lc, newVis, nb);
+            const further = this.getPieceCaptures(lr, lc, newVis, nb, t);
             if (further.length > 0) {
                 for (const f of further) {
                     captures.push({
@@ -116,15 +123,19 @@ class CheckersEngine {
     /** All moves for current turn */
     getAllMoves() {
         let captures = [];
+        for (let r = 0; r < 8; r++)
+            for (let c = 0; c < 8; c++)
+                if (this.isOwn(this.board[r][c], this.turn))
+                    captures.push(...this.getPieceCaptures(r, c, null, null, this.turn));
+        this.mustCapture = captures.length > 0;
+        if (captures.length > 0) return captures;
+        // Only compute simple moves if no captures
         let simples = [];
         for (let r = 0; r < 8; r++)
             for (let c = 0; c < 8; c++)
-                if (this.isOwn(this.board[r][c], this.turn)) {
-                    captures.push(...this.getPieceCaptures(r,c));
-                    simples.push(...this.getPieceSimpleMoves(r,c));
-                }
-        this.mustCapture = captures.length > 0;
-        return captures.length > 0 ? captures : simples;
+                if (this.isOwn(this.board[r][c], this.turn))
+                    simples.push(...this.getPieceSimpleMoves(r, c, this.turn));
+        return simples;
     }
 
     getMovesFrom(r, c) {

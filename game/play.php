@@ -161,6 +161,7 @@ const USER_ID = <?= $user ? $user['id'] : 'null' ?>;
 const IS_PRO = <?= ($user && $user['is_pro']) ? 'true' : 'false' ?>;
 const ROOM_CODE = '<?= $roomCode ?? '' ?>';
 const USER_SKIN = '<?= $skin ?>';
+let GAME_ID = null; // Will be set after game is created in DB
 
 // Init board
 const board = new BoardUI('gameBoard', {
@@ -178,15 +179,19 @@ const board = new BoardUI('gameBoard', {
 function handleMove(move, engine) {
     const status = document.getElementById('gameStatus');
     if (status) {
-        status.textContent = engine.turn === P1 ? 'Ваш ход ♟' : (MODE === 'ai' ? 'ИИ думает...' : 'Ход соперника');
+        if (engine.gameOver) {
+            status.textContent = '';
+        } else {
+            status.textContent = engine.turn === P1 ? 'Ваш ход ♟' : (MODE === 'ai' ? 'ИИ думает...' : 'Ход соперника');
+        }
     }
-    // Save move to server
+    // Save move to server (only if logged in and game exists)
     if (USER_ID && GAME_ID) {
         fetch('../api/save_move.php', {
             method: 'POST',
             headers: {'Content-Type':'application/json'},
             body: JSON.stringify({ game_id: GAME_ID, move })
-        });
+        }).catch(() => {}); // Silently ignore network errors
     }
 }
 

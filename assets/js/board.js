@@ -161,16 +161,29 @@ class BoardUI {
         this.aiThinking = true;
         this.showAIThinking(true);
 
-        const depths = { easy:2, medium:4, hard:6, expert:8 };
-        const depth = depths[this.options.difficulty] || 4;
+        // Reduce depths to keep UI responsive
+        const depths = { easy:2, medium:3, hard:4, expert:5 };
+        const depth = depths[this.options.difficulty] || 3;
 
-        // Use setTimeout to not block UI
+        // Run in a micro-task to let UI update first
+        const engineSnapshot = this.engine.clone();
         setTimeout(() => {
-            const move = this.engine.getBestMove(depth);
-            this.aiThinking = false;
-            this.showAIThinking(false);
-            if (move) this.executeMove(move);
-        }, 50);
+            try {
+                const move = engineSnapshot.getBestMove(depth);
+                this.aiThinking = false;
+                this.showAIThinking(false);
+                if (move && !this.engine.gameOver) {
+                    this.executeMove(move);
+                }
+            } catch(e) {
+                console.error('AI error:', e);
+                // Fallback: pick random move
+                const moves = this.engine.getAllMoves();
+                this.aiThinking = false;
+                this.showAIThinking(false);
+                if (moves.length > 0) this.executeMove(moves[0]);
+            }
+        }, 80);
     }
 
     showAIThinking(show) {

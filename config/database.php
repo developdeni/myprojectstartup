@@ -4,13 +4,13 @@
 // ============================================
 
 define('DB_HOST', 'localhost');
-define('DB_NAME', 'checkers_db');
-define('DB_USER', 'root');
-define('DB_PASS', '');
+define('DB_NAME', 'broldru_aibektest');
+define('DB_USER', 'broldru_aibektest');
+define('DB_PASS', 'aibektest!');
 define('DB_CHARSET', 'utf8mb4');
 
 define('APP_NAME', 'CheckMasters');
-define('APP_URL', 'http://localhost/aibek');
+define('APP_URL', 'https://studybridge.expres.kz/');
 define('APP_VERSION', '1.0.0');
 
 // Session settings
