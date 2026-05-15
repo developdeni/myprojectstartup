@@ -1,0 +1,37 @@
+/* GAME-SPECIFIC CSS */
+.game-mode-badge{background:var(--surface);border:1px solid var(--border);border-radius:100px;padding:4px 12px;font-size:.8rem;color:var(--text2)}
+.board-labels-top{display:flex;padding-left:24px}
+.board-labels-top span{width:72px;text-align:center;font-size:.75rem;color:var(--text2);font-family:'JetBrains Mono',monospace}
+.board-labels-side{display:flex;flex-direction:column;justify-content:space-around;padding:2px 6px;font-size:.75rem;color:var(--text2);font-family:'JetBrains Mono',monospace;width:24px}
+.game-status{margin-top:12px;font-size:.9rem;color:var(--text2);font-weight:600;text-align:center;min-height:24px}
+.ai-thinking-bar{display:flex;align-items:center;gap:8px;margin-top:8px;color:var(--accent);font-size:.85rem}
+.diff-btn{width:100%;padding:8px;margin-bottom:6px;background:var(--bg3);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text2);font-family:'Outfit',sans-serif;font-size:.82rem;cursor:pointer;transition:.2s;text-align:left}
+.diff-btn.active{border-color:var(--accent);color:var(--text);background:rgba(124,106,247,.1)}
+.diff-btn:hover{border-color:var(--border2)}
+
+/* Skin variants */
+.board.skin-neon .board-cell.light{background:#1a1a2e}
+.board.skin-neon .board-cell.dark{background:#16213e}
+.board.skin-neon .piece.p1{background:radial-gradient(circle at 35% 30%,#80ffff,#00ffff 60%,#007777)}
+.board.skin-neon .piece.p2{background:radial-gradient(circle at 35% 30%,#ff80ff,#ff00ff 60%,#770077)}
+.board.skin-fire .board-cell.light{background:#2d1b00}
+.board.skin-fire .board-cell.dark{background:#1a0d00}
+.board.skin-fire .piece.p1{background:radial-gradient(circle at 35% 30%,#ffaa00,#ff4500 60%,#990000)}
+.board.skin-fire .piece.p2{background:radial-gradient(circle at 35% 30%,#aaddff,#00bfff 60%,#003366)}
+.board.skin-gold .board-cell.light{background:#3d2b00}
+.board.skin-gold .board-cell.dark{background:#1a1200}
+.board.skin-gold .piece.p1{background:radial-gradient(circle at 35% 30%,#fffaaa,#ffd700 60%,#886600)}
+.board.skin-gold .piece.p2{background:radial-gradient(circle at 35% 30%,#444,#1a1a1a 60%,#000)}
+.board.skin-emerald .board-cell.light{background:#0d2614}
+.board.skin-emerald .board-cell.dark{background:#071a0d}
+.board.skin-emerald .piece.p1{background:radial-gradient(circle at 35% 30%,#afffcf,#50fa7b 60%,#1a7a3a)}
+.board.skin-emerald .piece.p2{background:radial-gradient(circle at 35% 30%,#666,#282a36 60%,#111)}
+.board.skin-galaxy .board-cell.light{background:#0f0c29}
+.board.skin-galaxy .board-cell.dark{background:#302b63}
+.board.skin-galaxy .piece.p1{background:radial-gradient(circle at 35% 30%,#c4b5fd,#a78bfa 60%,#5b21b6)}
+.board.skin-galaxy .piece.p2{background:radial-gradient(circle at 35% 30%,#fbb6ce,#f472b6 60%,#9d174d)}
+
+/* Possible move dot */
+.board-cell.possible-move{position:relative}
+.board-cell.possible-move::after{content:'';display:block;width:32%;height:32%;border-radius:50%;background:rgba(0,0,0,.25);position:absolute;top:50%;left:50%;transform:translate(-50%,-50%)}
+.board-cell.possible-capture::after{content:'';display:block;width:88%;height:88%;border-radius:50%;border:3px solid rgba(220,50,50,.55);position:absolute;top:50%;left:50%;transform:translate(-50%,-50%)}
