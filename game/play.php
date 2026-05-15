@@ -129,11 +129,28 @@ if ($roomCode) {
         </div>
         <?php endif; ?>
 
-        <div style="margin-top:auto;padding-top:16px">
-            <a href="lobby.php" class="btn btn-ghost" style="width:100%;justify-content:center">← Лобби</a>
-        </div>
     </aside>
 </div>
+
+<!-- Mobile bottom bar (visible on small screens) -->
+<div class="game-mobile-bar" id="gameMobileBar">
+    <div class="mobile-timer-row">
+        <div class="mobile-timer" id="mobile-panel-p2">
+            <div class="mobile-timer-name"><?= $mode==='ai' ? '🤖 '.ucfirst($difficulty).' ИИ' : 'Игрок 2' ?></div>
+            <div class="mobile-timer-time" id="mobile-timer-p2">05:00</div>
+        </div>
+        <div style="display:flex;align-items:center;gap:8px">
+            <button onclick="board.reset()" class="btn btn-ghost" style="padding:6px 10px;font-size:1rem" title="Сброс">↺</button>
+            <a href="lobby.php" class="btn btn-ghost" style="padding:6px 10px;font-size:.8rem">← Лобби</a>
+        </div>
+        <div class="mobile-timer active-turn" id="mobile-panel-p1">
+            <div class="mobile-timer-name"><?= $playerName1 ?></div>
+            <div class="mobile-timer-time" id="mobile-timer-p1">05:00</div>
+        </div>
+    </div>
+    <div style="width:100%;text-align:center;font-size:.85rem;color:var(--text2)" id="mobileStatus">Ваш ход ♟</div>
+</div>
+
 
 <!-- Game Over Modal -->
 <div class="modal-overlay" id="gameOverModal">
@@ -167,7 +184,7 @@ let GAME_ID = null; // Will be set after game is created in DB
 const board = new BoardUI('gameBoard', {
     mode: MODE,
     difficulty: DIFFICULTY,
-    playerSide: P1,
+    playerSide: P1,   // Player always plays as P1 (light, bottom)
     skin: USER_SKIN,
     timeControl: 300,
     hintsEnabled: true,
@@ -176,22 +193,35 @@ const board = new BoardUI('gameBoard', {
     onGameOver: handleGameOver,
 });
 
+// Patch renderTimers to also update mobile bar
+const _origRenderTimers = board.renderTimers.bind(board);
+board.renderTimers = function() {
+    _origRenderTimers();
+    const fmt = s => `${String(Math.floor(s/60)).padStart(2,'0')}:${String(s%60).padStart(2,'0')}`;
+    const mt1 = document.getElementById('mobile-timer-p1');
+    const mt2 = document.getElementById('mobile-timer-p2');
+    if (mt1) mt1.textContent = fmt(this.timers[P1]);
+    if (mt2) mt2.textContent = fmt(this.timers[P2]);
+    // Active panel highlight
+    document.getElementById('mobile-panel-p1')?.classList.toggle('active-turn', this.engine.turn === P1);
+    document.getElementById('mobile-panel-p2')?.classList.toggle('active-turn', this.engine.turn === P2);
+};
+
 function handleMove(move, engine) {
+    const statusText = engine.gameOver ? '' :
+        (engine.turn === P1 ? 'Ваш ход ♟' : (MODE === 'ai' ? 'ИИ думает...' : 'Ход соперника'));
     const status = document.getElementById('gameStatus');
-    if (status) {
-        if (engine.gameOver) {
-            status.textContent = '';
-        } else {
-            status.textContent = engine.turn === P1 ? 'Ваш ход ♟' : (MODE === 'ai' ? 'ИИ думает...' : 'Ход соперника');
-        }
-    }
+    const mStatus = document.getElementById('mobileStatus');
+    if (status) status.textContent = statusText;
+    if (mStatus) mStatus.textContent = statusText;
+
     // Save move to server (only if logged in and game exists)
     if (USER_ID && GAME_ID) {
         fetch('../api/save_move.php', {
             method: 'POST',
             headers: {'Content-Type':'application/json'},
             body: JSON.stringify({ game_id: GAME_ID, move })
-        }).catch(() => {}); // Silently ignore network errors
+        }).catch(() => {});
     }
 }
 

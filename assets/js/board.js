@@ -128,6 +128,8 @@ class BoardUI {
     executeMove(move) {
         const hadCaptures = move.captures.length > 0;
         const fromPiece = this.engine.board[move.from[0]][move.from[1]];
+        const movedBy = this.engine.turn; // who is moving NOW
+
         this.engine.applyMove(move);
         this.lastMove = move;
         this.selected = null;
@@ -151,9 +153,10 @@ class BoardUI {
             return;
         }
 
-        // AI turn
-        if (this.options.mode === 'ai' && this.engine.turn !== this.options.playerSide) {
-            setTimeout(() => this.doAIMove(), 400);
+        // AI turn: fire when it's the AI's side to move
+        const aiSide = this.options.playerSide === P1 ? P2 : P1;
+        if (this.options.mode === 'ai' && this.engine.turn === aiSide) {
+            setTimeout(() => this.doAIMove(), 350);
         }
     }
 
