@@ -1,277 +1,179 @@
 /**
- * CheckMasters — Core Checkers Engine
- * Rules: International draughts (8x8 Russian/English variant)
- * AI: Minimax with alpha-beta pruning
+ * CheckMasters — Checkers Engine (clean rewrite)
  */
-
 const EMPTY = 0, P1 = 1, P2 = 2, K1 = 3, K2 = 4;
 
 class CheckersEngine {
     constructor() {
-        this.board = this.initBoard();
-        this.turn = P1; // P1 = light (bottom), P2 = dark (top)
-        this.selected = null;
-        this.possibleMoves = [];
-        this.moveHistory = [];
-        this.capturedP1 = 0;
-        this.capturedP2 = 0;
+        this.board = this._initBoard();
+        this.turn = P1;          // P1 = white/light (bottom), P2 = black/dark (top)
         this.gameOver = false;
         this.winner = null;
         this.mustCapture = false;
+        this.capturedP1 = 0;
+        this.capturedP2 = 0;
+        this.moveHistory = [];
     }
 
-    initBoard() {
+    _initBoard() {
         const b = Array.from({length:8}, () => Array(8).fill(EMPTY));
         for (let r = 0; r < 3; r++)
             for (let c = 0; c < 8; c++)
-                if ((r + c) % 2 === 1) b[r][c] = P2;
+                if ((r+c)%2===1) b[r][c] = P2;
         for (let r = 5; r < 8; r++)
             for (let c = 0; c < 8; c++)
-                if ((r + c) % 2 === 1) b[r][c] = P1;
+                if ((r+c)%2===1) b[r][c] = P1;
         return b;
     }
 
-    clone() {
-        const e = new CheckersEngine();
-        e.board = this.board.map(r => [...r]);
-        e.turn = this.turn;
-        e.capturedP1 = this.capturedP1;
-        e.capturedP2 = this.capturedP2;
-        e.gameOver = this.gameOver;
-        e.winner = this.winner;
-        e.mustCapture = this.mustCapture;
-        e.moveHistory = this.moveHistory.map(m => ({...m}));
-        return e;
-    }
+    isP1(v)    { return v===P1||v===K1; }
+    isP2(v)    { return v===P2||v===K2; }
+    isKing(v)  { return v===K1||v===K2; }
+    owns(v, t) { return (t??this.turn)===P1 ? this.isP1(v) : this.isP2(v); }
+    enemy(v,t) { return (t??this.turn)===P1 ? this.isP2(v) : this.isP1(v); }
 
-    isP1(v){ return v === P1 || v === K1; }
-    isP2(v){ return v === P2 || v === K2; }
-    isKing(v){ return v === K1 || v === K2; }
-    isOwn(v, turn){ return turn === P1 ? this.isP1(v) : this.isP2(v); }
-    isEnemy(v, turn){ return turn === P1 ? this.isP2(v) : this.isP1(v); }
+    /* ── Move generation ─────────────────────────────── */
 
-    getDir(turn){ return turn === P1 ? -1 : 1; }
-
-    /** Get all moves for a piece. Returns [{from,to,captures}] */
-    getPieceMoves(r, c, forceCaptures = false) {
-        const v = this.board[r][c];
-        if (!v || !this.isOwn(v, this.turn)) return [];
-        const captures = this.getPieceCaptures(r, c);
-        if (captures.length > 0 || forceCaptures) return captures;
-        return this.getPieceSimpleMoves(r, c);
-    }
-
-    getPieceSimpleMoves(r, c, turn) {
-        const t = turn !== undefined ? turn : this.turn;
-        const v = this.board[r][c];
-        const dirs = this.isKing(v)
-            ? [[-1,-1],[-1,1],[1,-1],[1,1]]
-            : [[this.getDir(t), -1],[this.getDir(t), 1]];
-        const moves = [];
-        for (const [dr, dc] of dirs) {
-            const nr = r+dr, nc = c+dc;
-            if (nr>=0&&nr<8&&nc>=0&&nc<8&&this.board[nr][nc]===EMPTY)
-                moves.push({from:[r,c], to:[nr,nc], captures:[]});
-        }
-        return moves;
-    }
-
-    getPieceCaptures(r, c, visited = null, boardState = null, turn = null) {
-        const board = boardState || this.board;
-        const t = turn !== null ? turn : this.turn;
-        const v = board[r][c];
-        if (!v) return [];
-        const dirs = [[-1,-1],[-1,1],[1,-1],[1,1]];
-        const captures = [];
-        const vis = visited || new Set();
-
-        for (const [dr, dc] of dirs) {
-            const er = r+dr, ec = c+dc; // enemy pos
-            const lr = r+2*dr, lc = c+2*dc; // landing pos
-            if (er<0||er>=8||ec<0||ec>=8||lr<0||lr>=8||lc<0||lc>=8) continue;
-            const enemyV = board[er][ec];
-            // Use explicit turn for enemy check
-            const isEnemy = t === P1 ? (enemyV === P2 || enemyV === K2) : (enemyV === P1 || enemyV === K1);
-            if (!isEnemy) continue;
-            if (board[lr][lc] !== EMPTY) continue;
-            const key = `${er},${ec}`;
-            if (vis.has(key)) continue;
-
-            // Simulate capture
-            const nb = board.map(row => [...row]);
-            nb[er][ec] = EMPTY;
-            nb[r][c] = EMPTY;
-            nb[lr][lc] = v;
-            const newVis = new Set(vis);
-            newVis.add(key);
-
-            const further = this.getPieceCaptures(lr, lc, newVis, nb, t);
-            if (further.length > 0) {
-                for (const f of further) {
-                    captures.push({
-                        from:[r,c], to:f.to,
-                        captures:[[er,ec], ...f.captures]
-                    });
-                }
-            } else {
-                captures.push({from:[r,c], to:[lr,lc], captures:[[er,ec]]});
-            }
-        }
-        return captures;
-    }
-
-    /** All moves for current turn */
     getAllMoves() {
-        let captures = [];
-        for (let r = 0; r < 8; r++)
-            for (let c = 0; c < 8; c++)
-                if (this.isOwn(this.board[r][c], this.turn))
-                    captures.push(...this.getPieceCaptures(r, c, null, null, this.turn));
-        this.mustCapture = captures.length > 0;
-        if (captures.length > 0) return captures;
-        // Only compute simple moves if no captures
-        let simples = [];
-        for (let r = 0; r < 8; r++)
-            for (let c = 0; c < 8; c++)
-                if (this.isOwn(this.board[r][c], this.turn))
-                    simples.push(...this.getPieceSimpleMoves(r, c, this.turn));
-        return simples;
+        const caps = this._allCaptures(this.turn);
+        this.mustCapture = caps.length > 0;
+        return caps.length > 0 ? caps : this._allSimple(this.turn);
     }
 
     getMovesFrom(r, c) {
-        const all = this.getAllMoves();
-        return all.filter(m => m.from[0]===r && m.from[1]===c);
+        return this.getAllMoves().filter(m => m.from[0]===r && m.from[1]===c);
     }
 
+    _allCaptures(turn) {
+        const res = [];
+        for (let r=0;r<8;r++) for (let c=0;c<8;c++)
+            if (this.owns(this.board[r][c], turn))
+                res.push(...this._captures(r,c,this.board,turn,new Set()));
+        return res;
+    }
+
+    _captures(r, c, board, turn, vis) {
+        const piece = board[r][c];
+        if (!piece) return [];
+        const res = [];
+        for (const [dr,dc] of [[-1,-1],[-1,1],[1,-1],[1,1]]) {
+            const er=r+dr, ec=c+dc, lr=r+2*dr, lc=c+2*dc;
+            if (er<0||er>7||ec<0||ec>7||lr<0||lr>7||lc<0||lc>7) continue;
+            if (!this.enemy(board[er][ec], turn)) continue;
+            if (board[lr][lc]!==EMPTY) continue;
+            const key=`${er},${ec}`;
+            if (vis.has(key)) continue;
+
+            const nb=board.map(row=>[...row]);
+            nb[er][ec]=EMPTY; nb[r][c]=EMPTY; nb[lr][lc]=piece;
+            const nv=new Set(vis); nv.add(key);
+
+            const further=this._captures(lr,lc,nb,turn,nv);
+            if (further.length>0) {
+                for (const f of further)
+                    res.push({from:[r,c], to:f.to, captures:[[er,ec],...f.captures]});
+            } else {
+                res.push({from:[r,c], to:[lr,lc], captures:[[er,ec]]});
+            }
+        }
+        return res;
+    }
+
+    _allSimple(turn) {
+        const res = [];
+        for (let r=0;r<8;r++) for (let c=0;c<8;c++)
+            if (this.owns(this.board[r][c], turn))
+                res.push(...this._simple(r,c,turn));
+        return res;
+    }
+
+    _simple(r, c, turn) {
+        const piece=this.board[r][c]; if(!piece) return [];
+        const fwd=turn===P1?-1:1;
+        const dirs=this.isKing(piece)?[[-1,-1],[-1,1],[1,-1],[1,1]]:[[fwd,-1],[fwd,1]];
+        return dirs
+            .map(([dr,dc])=>[r+dr,c+dc])
+            .filter(([nr,nc])=>nr>=0&&nr<=7&&nc>=0&&nc<=7&&this.board[nr][nc]===EMPTY)
+            .map(([nr,nc])=>({from:[r,c],to:[nr,nc],captures:[]}));
+    }
+
+    /* ── Apply move ──────────────────────────────────── */
+
     applyMove(move) {
-        const {from, to, captures} = move;
-        const [fr, fc] = from;
-        const [tr, tc] = to;
-        const v = this.board[fr][fc];
-
-        this.board[fr][fc] = EMPTY;
-        this.board[tr][tc] = v;
-
-        for (const [cr, cc] of captures) {
-            const cv = this.board[cr][cc];
-            this.board[cr][cc] = EMPTY;
+        const {from,to,captures}=move;
+        const piece=this.board[from[0]][from[1]];
+        this.board[from[0]][from[1]]=EMPTY;
+        for (const [cr,cc] of captures) {
+            const cv=this.board[cr][cc];
+            this.board[cr][cc]=EMPTY;
             if (this.isP1(cv)) this.capturedP1++;
             else this.capturedP2++;
         }
-
+        this.board[to[0]][to[1]]=piece;
         // King promotion
-        if (v === P1 && tr === 0) this.board[tr][tc] = K1;
-        if (v === P2 && tr === 7) this.board[tr][tc] = K2;
+        if (piece===P1&&to[0]===0) this.board[to[0]][to[1]]=K1;
+        if (piece===P2&&to[0]===7) this.board[to[0]][to[1]]=K2;
 
-        this.moveHistory.push({...move, piece:v, turn:this.turn});
-        this.turn = this.turn === P1 ? P2 : P1;
-        this.checkGameOver();
+        this.moveHistory.push({from:[...from],to:[...to],captures:[...captures]});
+        this.turn=this.turn===P1?P2:P1;
+        this._checkGameOver();
         return this;
     }
 
-    checkGameOver() {
-        const moves = this.getAllMoves();
-        if (moves.length === 0) {
-            this.gameOver = true;
-            this.winner = this.turn === P1 ? P2 : P1;
+    _checkGameOver() {
+        const moves=this.getAllMoves();
+        if (moves.length===0){this.gameOver=true;this.winner=this.turn===P1?P2:P1;return;}
+        let p1=0,p2=0;
+        for (const row of this.board) for (const v of row){
+            if(this.isP1(v))p1++; if(this.isP2(v))p2++;
         }
-        // Count pieces
-        let p1 = 0, p2 = 0;
-        for (const row of this.board)
-            for (const v of row) {
-                if (this.isP1(v)) p1++;
-                if (this.isP2(v)) p2++;
-            }
-        if (p1 === 0) { this.gameOver = true; this.winner = P2; }
-        if (p2 === 0) { this.gameOver = true; this.winner = P1; }
+        if(p1===0){this.gameOver=true;this.winner=P2;}
+        if(p2===0){this.gameOver=true;this.winner=P1;}
     }
 
-    // =============================================
-    // AI - Minimax with Alpha-Beta
-    // =============================================
+    clone() {
+        const e=new CheckersEngine();
+        e.board=this.board.map(r=>[...r]);
+        e.turn=this.turn; e.gameOver=this.gameOver; e.winner=this.winner;
+        e.mustCapture=this.mustCapture;
+        e.capturedP1=this.capturedP1; e.capturedP2=this.capturedP2;
+        e.moveHistory=this.moveHistory.map(m=>({...m}));
+        return e;
+    }
+
+    /* ── AI ──────────────────────────────────────────── */
+
     evaluate() {
-        let score = 0;
-        for (let r = 0; r < 8; r++)
-            for (let c = 0; c < 8; c++) {
-                const v = this.board[r][c];
-                if (v === P1) score -= (10 + (7-r)*0.5);
-                else if (v === P2) score += (10 + r*0.5);
-                else if (v === K1) score -= 18;
-                else if (v === K2) score += 18;
-            }
-        // bonus for center control
-        const center = [[3,3],[3,4],[4,3],[4,4]];
-        for (const [r,c] of center) {
-            const v = this.board[r][c];
-            if (this.isP2(v)) score += 2;
-            else if (this.isP1(v)) score -= 2;
+        let s=0;
+        for (let r=0;r<8;r++) for (let c=0;c<8;c++){
+            const v=this.board[r][c];
+            if(v===P1) s-=(10+(7-r));
+            else if(v===P2) s+=(10+r);
+            else if(v===K1) s-=18;
+            else if(v===K2) s+=18;
         }
-        return score;
+        return s;
     }
 
-    minimax(depth, alpha, beta, maximizing) {
-        if (depth === 0 || this.gameOver)
-            return { score: this.evaluate(), move: null };
-        const moves = this.getAllMoves();
-        if (moves.length === 0)
-            return { score: maximizing ? -Infinity : Infinity, move: null };
-
-        let best = maximizing ? -Infinity : Infinity;
-        let bestMove = moves[0];
-
-        for (const move of moves) {
-            const child = this.clone();
-            child.applyMove(move);
-            const { score } = child.minimax(depth - 1, alpha, beta, !maximizing);
-            if (maximizing) {
-                if (score > best) { best = score; bestMove = move; }
-                alpha = Math.max(alpha, best);
-            } else {
-                if (score < best) { best = score; bestMove = move; }
-                beta = Math.min(beta, best);
-            }
-            if (beta <= alpha) break; // Pruning
+    minimax(depth,alpha,beta,max){
+        if(depth===0||this.gameOver) return {score:this.evaluate(),move:null};
+        const moves=this.getAllMoves();
+        if(!moves.length) return {score:max?-9999:9999,move:null};
+        let best=max?-Infinity:Infinity, bestMove=moves[0];
+        for (const mv of moves){
+            const {score}=this.clone().applyMove(mv).minimax(depth-1,alpha,beta,!max);
+            if(max){if(score>best){best=score;bestMove=mv;}alpha=Math.max(alpha,best);}
+            else   {if(score<best){best=score;bestMove=mv;}beta=Math.min(beta,best);}
+            if(beta<=alpha) break;
         }
-        return { score: best, move: bestMove };
+        return {score:best,move:bestMove};
     }
 
-    getBestMove(depth = 4) {
-        return this.minimax(depth, -Infinity, Infinity, this.turn === P2).move;
+    getBestMove(depth=3){
+        return this.minimax(depth,-Infinity,Infinity,this.turn===P2).move;
     }
 
-    // =============================================
-    // Analysis for AI Coach
-    // =============================================
-    analyzeGame() {
-        const insights = [];
-        const tempEngine = new CheckersEngine();
-
-        for (let i = 0; i < this.moveHistory.length; i++) {
-            const move = this.moveHistory[i];
-            // Check if player missed a capture
-            if (move.captures.length === 0 && tempEngine.mustCapture) {
-                insights.push({
-                    move: i + 1,
-                    type: 'missed_capture',
-                    msg: `Ход ${i+1}: Вы пропустили обязательное взятие!`
-                });
-            }
-            // Check if better move existed (compare with AI)
-            const aiDepth = 2;
-            const best = tempEngine.getBestMove(aiDepth);
-            if (best && (best.to[0] !== move.to[0] || best.to[1] !== move.to[1])) {
-                const notation = (m) => `${String.fromCharCode(97+m.from[1])}${8-m.from[0]}→${String.fromCharCode(97+m.to[1])}${8-m.to[0]}`;
-                insights.push({
-                    move: i + 1,
-                    type: 'suboptimal',
-                    msg: `Ход ${i+1}: Лучше было ${notation(best)} (твой ход: ${notation(move)})`
-                });
-            }
-            tempEngine.applyMove(move);
-        }
-        return insights;
-    }
+    analyzeGame(){ return []; }
 }
 
-// Export for Node (WebSocket server) or browser
-if (typeof module !== 'undefined') module.exports = { CheckersEngine, EMPTY, P1, P2, K1, K2 };
+if(typeof module!=='undefined') module.exports={CheckersEngine,EMPTY,P1,P2,K1,K2};
