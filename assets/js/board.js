@@ -64,6 +64,15 @@ class BoardUI {
             ? new Set([`${this.lastMove.from[0]},${this.lastMove.from[1]}`,`${this.lastMove.to[0]},${this.lastMove.to[1]}`])
             : new Set();
 
+        // Highlight dots for possible destinations (landing squares)
+        // For captures: show red ring on ENEMY piece square (intuitive!)
+        const enemyKeys = new Set();
+        if (this.selected) {
+            this.possibleMoves.filter(m=>m.captures.length>0).forEach(m=>{
+                m.captures.forEach(([er,ec])=>enemyKeys.add(`${er},${ec}`));
+            });
+        }
+
         this.container.innerHTML = '';
         this.container.className = `board skin-${this.options.skin}`;
 
@@ -71,33 +80,29 @@ class BoardUI {
             for (let c=0; c<8; c++) {
                 const cell = document.createElement('div');
                 const key  = `${r},${c}`;
-                const isLight = (r+c)%2===0;
-
-                cell.className = `board-cell ${isLight?'light':'dark'}`;
+                cell.className = `board-cell ${(r+c)%2===0?'light':'dark'}`;
                 cell.id = `cell-${r}-${c}`;
 
-                if (key===selectedKey)     cell.classList.add('selected');
-                if (capDests.has(key))     cell.classList.add('possible-capture');
-                else if (moveDests.has(key)) cell.classList.add('possible-move');
+                if (key === selectedKey)   cell.classList.add('selected');
+                if (moveDests.has(key))    cell.classList.add('possible-move');
+                if (enemyKeys.has(key))    cell.classList.add('possible-capture');
                 if (lastKeys.has(key))     cell.classList.add('last-move');
 
                 const v = this.engine.board[r][c];
-                if (v!==EMPTY) {
+                if (v !== EMPTY) {
                     const piece = document.createElement('div');
                     piece.className = `piece p${this.engine.isP1(v)?1:2}${this.engine.isKing(v)?' king':''}`;
-                    if (key===selectedKey) piece.classList.add('selected-piece');
-                    // Piece click → bubble to cell — do NOT stop propagation
+                    if (key === selectedKey) piece.classList.add('selected-piece');
                     cell.appendChild(piece);
                 }
 
-                // Hint dot (DOM element, not ::after — avoids pointer-events issues)
-                if (moveDests.has(key) && !capDests.has(key)) {
+                // Hint dot for simple moves & capture landings
+                if (moveDests.has(key)) {
                     const dot = document.createElement('div');
-                    dot.style.cssText='position:absolute;width:32%;height:32%;border-radius:50%;background:rgba(0,0,0,.22);pointer-events:none;z-index:1;top:50%;left:50%;transform:translate(-50%,-50%)';
+                    dot.style.cssText = 'position:absolute;width:34%;height:34%;border-radius:50%;background:rgba(0,0,0,.2);pointer-events:none;z-index:2;top:50%;left:50%;transform:translate(-50%,-50%)';
                     cell.appendChild(dot);
                 }
 
-                // Click handler — capture r,c in closure
                 cell.addEventListener('click', ((row,col)=>()=>this._onClick(row,col))(r,c));
                 this.container.appendChild(cell);
             }
@@ -200,30 +205,31 @@ class BoardUI {
     }
 
     /* ── Sidebars ───────────────────────────────────── */
+    updateSidebars(move) { this._updateSidebars(move); } // public alias
+
     _updateSidebars(move) {
-        // Move list
-        const ml=document.getElementById('moveList');
-        if (ml) {
-            const n=this.engine.moveHistory.length;
-            const m=move;
-            const note=`${String.fromCharCode(97+m.from[1])}${8-m.from[0]}→${String.fromCharCode(97+m.to[1])}${8-m.to[0]}`;
-            const wasP1=this.engine.moveHistory[n-1]&&this.engine.isP1(undefined); // just track parity
-            if (n%2===1) { // P1 moved (odd history length)
-                const row=document.createElement('div');
-                row.className='move-item';
-                row.innerHTML=`<span class="move-num">${Math.ceil(n/2)}.</span><span class="move-white">${note}</span><span class="move-black"></span>`;
+        const ml = document.getElementById('moveList');
+        if (ml && move) {
+            const n = this.engine.moveHistory.length;
+            const note = `${String.fromCharCode(97+move.from[1])}${8-move.from[0]}→${String.fromCharCode(97+move.to[1])}${8-move.to[0]}`;
+            // P1 moves on odd positions in history (1,3,5...), P2 on even (2,4,6...)
+            if (n % 2 === 1) {
+                const row = document.createElement('div');
+                row.className = 'move-item';
+                row.innerHTML = `<span class="move-num">${Math.ceil(n/2)}.</span><span class="move-white">${note}</span><span class="move-black"></span>`;
                 ml.appendChild(row);
-            } else if(ml.lastElementChild) {
-                ml.lastElementChild.querySelector('.move-black').textContent=note;
+            } else if (ml.lastElementChild) {
+                const bl = ml.lastElementChild.querySelector('.move-black');
+                if (bl) bl.textContent = note;
             }
-            ml.scrollTop=ml.scrollHeight;
+            ml.scrollTop = ml.scrollHeight;
         }
-        const cp1=document.getElementById('capturedP1');
-        const cp2=document.getElementById('capturedP2');
-        if(cp1) cp1.textContent=this.engine.capturedP1;
-        if(cp2) cp2.textContent=this.engine.capturedP2;
-        document.getElementById('panel-p1')?.classList.toggle('active',this.engine.turn===P1);
-        document.getElementById('panel-p2')?.classList.toggle('active',this.engine.turn===P2);
+        const cp1 = document.getElementById('capturedP1');
+        const cp2 = document.getElementById('capturedP2');
+        if (cp1) cp1.textContent = this.engine.capturedP1;
+        if (cp2) cp2.textContent = this.engine.capturedP2;
+        document.getElementById('panel-p1')?.classList.toggle('active', this.engine.turn === P1);
+        document.getElementById('panel-p2')?.classList.toggle('active', this.engine.turn === P2);
     }
 
     /* ── Timer ──────────────────────────────────────── */
