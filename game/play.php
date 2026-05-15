@@ -118,16 +118,22 @@ if ($roomCode) {
             <div id="skinSelector" style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px"></div>
         </div>
 
+
         <?php if ($mode === 'online'): ?>
-        <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:16px">
-            <div style="font-size:.85rem;font-weight:600;margin-bottom:10px;color:var(--text2)">💬 Чат</div>
-            <div id="chatMessages" style="height:120px;overflow-y:auto;font-size:.82rem;color:var(--text2);margin-bottom:8px"></div>
-            <div style="display:flex;gap:6px">
-                <input type="text" id="chatInput" class="form-input" style="padding:6px 10px;font-size:.82rem" placeholder="Сообщение...">
-                <button onclick="sendChat()" class="btn btn-primary" style="padding:6px 12px">→</button>
+        <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:14px">
+            <div style="font-size:.85rem;font-weight:600;margin-bottom:8px;color:var(--text2)">💬 Чат</div>
+            <div id="chatMessages" class="chat-box"></div>
+            <div class="chat-input-row">
+                <input type="text" id="chatInput" class="form-input"
+                       style="padding:7px 10px;font-size:.82rem;flex:1"
+                       placeholder="Напиши сообщение..." maxlength="200" autocomplete="off">
+                <button id="chatSendBtn" onclick="sendChat()" class="chat-send-btn" title="Отправить">➤</button>
             </div>
+            <div style="font-size:.68rem;color:var(--text2);margin-top:4px">Enter — отправить</div>
         </div>
         <?php endif; ?>
+
+
 
     </aside>
 </div>
@@ -316,6 +322,126 @@ skins.forEach(s => {
 document.getElementById('gameOverModal').addEventListener('click', function(e) {
     if (e.target === this) closeModal();
 });
+
+// ======================================
+// CHAT (online mode only)
+// ======================================
+<?php if ($mode === 'online'): ?>
+let chatLastTime = Math.floor(Date.now() / 1000) - 5;
+let chatPolling = null;
+
+function sendChat() {
+    const input = document.getElementById('chatInput');
+    if (!input) return;
+    const msg = input.value.trim();
+    if (!msg || !ROOM_CODE) return;
+
+    input.value = '';
+    input.disabled = true;
+
+    fetch('../api/chat_send.php', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ room_code: ROOM_CODE, message: msg })
+    })
+    .then(r => r.json())
+    .then(d => {
+        input.disabled = false;
+        input.focus();
+        if (!d.success) console.warn('Chat error:', d.error);
+        else fetchChatMessages(); // Fetch immediately after send
+    })
+    .catch(() => {
+        input.disabled = false;
+        input.focus();
+        appendChatMsg({ username: 'Система', message: '❌ Не удалось отправить', is_mine: false, error: true });
+    });
+}
+
+function fetchChatMessages() {
+    if (!ROOM_CODE) return;
+    fetch(`../api/chat_get.php?room_code=${ROOM_CODE}&since=${chatLastTime}`)
+    .then(r => r.json())
+    .then(d => {
+        if (!d.success) return;
+        if (d.messages && d.messages.length > 0) {
+            d.messages.forEach(m => appendChatMsg(m));
+            chatLastTime = d.server_time;
+        }
+    })
+    .catch(() => {}); // Silent fail on network error
+}
+
+function appendChatMsg(msg) {
+    const box = document.getElementById('chatMessages');
+    if (!box) return;
+
+    const el = document.createElement('div');
+    el.style.cssText = `
+        margin-bottom: 6px;
+        display: flex;
+        flex-direction: column;
+        align-items: ${msg.is_mine ? 'flex-end' : 'flex-start'};
+    `;
+
+    const bubble = document.createElement('div');
+    bubble.style.cssText = `
+        background: ${msg.is_mine ? 'rgba(124,106,247,.25)' : 'rgba(255,255,255,.06)'};
+        border: 1px solid ${msg.is_mine ? 'rgba(124,106,247,.4)' : 'rgba(255,255,255,.1)'};
+        border-radius: ${msg.is_mine ? '12px 12px 2px 12px' : '12px 12px 12px 2px'};
+        padding: 5px 10px;
+        max-width: 90%;
+        word-break: break-word;
+        ${msg.error ? 'color:#ef4444;' : ''}
+    `;
+
+    if (!msg.is_mine) {
+        const name = document.createElement('div');
+        name.style.cssText = 'font-size:.68rem;color:var(--accent);font-weight:600;margin-bottom:2px';
+        name.textContent = msg.username;
+        bubble.appendChild(name);
+    }
+
+    const text = document.createElement('div');
+    text.style.cssText = 'font-size:.82rem;color:var(--text)';
+    text.textContent = msg.message;
+    bubble.appendChild(text);
+    el.appendChild(bubble);
+
+    const time = document.createElement('div');
+    time.style.cssText = 'font-size:.65rem;color:var(--text2);margin-top:2px;padding:0 2px';
+    const d = msg.created_at ? new Date(msg.created_at.replace(' ', 'T')) : new Date();
+    time.textContent = d.toLocaleTimeString('ru', { hour: '2-digit', minute: '2-digit' });
+    el.appendChild(time);
+
+    box.appendChild(el);
+    box.scrollTop = box.scrollHeight;
+}
+
+// Enter to send
+document.getElementById('chatInput')?.addEventListener('keydown', e => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        sendChat();
+    }
+});
+
+// Start polling every 2.5s
+if (ROOM_CODE) {
+    fetchChatMessages(); // Initial load
+    chatPolling = setInterval(fetchChatMessages, 2500);
+
+    // Stop polling when page is hidden
+    document.addEventListener('visibilitychange', () => {
+        if (document.hidden) {
+            clearInterval(chatPolling);
+        } else {
+            fetchChatMessages();
+            chatPolling = setInterval(fetchChatMessages, 2500);
+        }
+    });
+}
+<?php endif; ?>
 </script>
 </body>
 </html>
