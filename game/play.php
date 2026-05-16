@@ -168,6 +168,10 @@ if ($roomCode) {
         <div class="modal-trophy" id="modalTrophy">🏆</div>
         <div class="modal-title" id="modalTitle">Победа!</div>
         <div class="modal-sub" id="modalSub">Отличная игра!</div>
+        <!-- XP & level-up feedback -->
+        <div id="xpFeedback" style="display:none;margin:12px 0;padding:12px 16px;background:rgba(124,106,247,.12);border:1px solid rgba(124,106,247,.25);border-radius:12px;font-size:.9rem">
+            <span id="xpFeedbackText"></span>
+        </div>
         <div id="aiCoachSection" style="display:none;margin-bottom:24px;text-align:left">
             <div style="font-size:.9rem;font-weight:700;margin-bottom:10px;color:var(--accent)">🤖 AI Coach анализ:</div>
             <div id="coachInsights" style="display:flex;flex-direction:column;gap:6px"></div>
@@ -175,6 +179,76 @@ if ($roomCode) {
         <div class="modal-actions">
             <button onclick="board.reset();closeModal()" class="btn btn-hero">↺ Ещё раз</button>
             <a href="lobby.php" class="btn btn-hero-outline">🏠 Лобби</a>
+        </div>
+    </div>
+</div>
+
+<!-- Achievement unlock toast -->
+<style>
+#achToastContainer{position:fixed;bottom:24px;right:24px;z-index:3000;display:flex;flex-direction:column-reverse;gap:10px;pointer-events:none}
+.ach-toast{background:linear-gradient(135deg,rgba(20,20,32,.97),rgba(30,28,50,.97));border:1px solid rgba(124,106,247,.5);border-radius:16px;padding:14px 18px;display:flex;align-items:center;gap:12px;min-width:260px;max-width:320px;box-shadow:0 8px 32px rgba(0,0,0,.5),0 0 0 1px rgba(124,106,247,.2);pointer-events:all;animation:toastIn .4s cubic-bezier(.22,1,.36,1) forwards}
+@keyframes toastIn{from{opacity:0;transform:translateX(60px)}to{opacity:1;transform:none}}
+.ach-toast.out{animation:toastOut .3s ease forwards}
+@keyframes toastOut{to{opacity:0;transform:translateX(60px)}}
+.ach-toast-icon{font-size:2rem;flex-shrink:0}
+.ach-toast-body{}
+.ach-toast-label{font-size:.68rem;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--accent);margin-bottom:2px}
+.ach-toast-name{font-size:.92rem;font-weight:700;color:#fff}
+.ach-toast-desc{font-size:.75rem;color:rgba(255,255,255,.55);margin-top:2px}
+</style>
+<div id="achToastContainer"></div>
+
+<!-- Chest Opening Modal -->
+<style>
+#chestModal{position:fixed;inset:0;z-index:4000;display:flex;align-items:center;justify-content:center;opacity:0;pointer-events:none;transition:.35s}
+#chestModal.visible{opacity:1;pointer-events:all}
+#chestModal .cm-bg{position:absolute;inset:0;background:rgba(0,0,0,.88);backdrop-filter:blur(20px)}
+.cm-box{position:relative;z-index:1;text-align:center;padding:52px 40px;max-width:440px;width:92%}
+/* Chest card */
+.cm-chest-wrap{position:relative;display:inline-flex;flex-direction:column;align-items:center;gap:10px;cursor:pointer;margin-bottom:20px}
+.cm-chest-emoji{font-size:7rem;line-height:1;transition:transform .3s;filter:drop-shadow(0 0 24px var(--cc)) drop-shadow(0 0 50px var(--cc));animation:chestFloat 2.5s ease-in-out infinite}
+@keyframes chestFloat{0%,100%{transform:translateY(0) rotate(-2deg)}50%{transform:translateY(-10px) rotate(2deg)}}
+.cm-chest-wrap:hover .cm-chest-emoji{transform:scale(1.12)!important;animation:none}
+.cm-chest-wrap.shaking .cm-chest-emoji{animation:chestShake .5s ease;}
+@keyframes chestShake{0%,100%{transform:rotate(0)}20%{transform:rotate(-12deg) scale(1.05)}40%{transform:rotate(12deg) scale(1.1)}60%{transform:rotate(-8deg)}80%{transform:rotate(8deg)}}
+.cm-chest-wrap.opening .cm-chest-emoji{animation:chestPop .7s cubic-bezier(.22,1,.36,1) forwards}
+@keyframes chestPop{0%{transform:scale(1)}40%{transform:scale(1.4) rotate(15deg)}100%{transform:scale(0) rotate(30deg);opacity:0}}
+.cm-chest-name{font-size:1.1rem;font-weight:800;letter-spacing:.04em;color:var(--cc)}
+.cm-chest-tap{font-size:.82rem;color:rgba(255,255,255,.5);animation:tapPulse 1.4s ease-in-out infinite}
+@keyframes tapPulse{0%,100%{opacity:.4}50%{opacity:1}}
+/* Particle burst */
+#chestParticles{position:fixed;inset:0;pointer-events:none;z-index:3999}
+/* Rewards screen */
+.cm-rewards{display:none;flex-direction:column;align-items:center;gap:20px;animation:rewardsFadeIn .5s ease}
+@keyframes rewardsFadeIn{from{opacity:0;transform:translateY(20px)}to{opacity:1;transform:none}}
+.cm-reward-grid{display:flex;flex-direction:column;gap:12px;width:100%;max-width:340px}
+.cm-reward-row{display:flex;align-items:center;gap:14px;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.1);border-radius:14px;padding:14px 18px;animation:rewardSlide .4s ease backwards}
+@keyframes rewardSlide{from{opacity:0;transform:translateX(-20px)}to{opacity:1;transform:none}}
+.cm-reward-icon{font-size:2rem;flex-shrink:0}
+.cm-reward-name{font-size:.95rem;font-weight:700;text-align:left}
+.cm-reward-type{font-size:.72rem;color:rgba(255,255,255,.45);text-align:left;text-transform:uppercase;letter-spacing:.08em}
+.cm-got-btn{background:linear-gradient(135deg,var(--cc),var(--cc2));color:#000;font-family:'Outfit',sans-serif;font-size:1rem;font-weight:800;border:none;border-radius:14px;padding:15px 44px;cursor:pointer;transition:.2s;box-shadow:0 6px 24px rgba(0,0,0,.3)}
+.cm-got-btn:hover{transform:translateY(-2px);box-shadow:0 10px 32px rgba(0,0,0,.4)}
+@media(max-width:600px){.cm-chest-emoji{font-size:5rem}.cm-box{padding:36px 20px}}
+</style>
+<canvas id="chestParticles"></canvas>
+<div id="chestModal">
+    <div class="cm-bg" id="cmBg"></div>
+    <div class="cm-box" id="cmBox">
+        <!-- Phase 1: Tap to open -->
+        <div id="cmPhase1">
+            <div style="font-size:.82rem;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:rgba(255,255,255,.4);margin-bottom:16px">ඝ️ Вы получили награду</div>
+            <div class="cm-chest-wrap" id="cmChestWrap" onclick="tapChest()">
+                <span class="cm-chest-emoji" id="cmChestEmoji">📦</span>
+                <span class="cm-chest-name" id="cmChestName">Common Chest</span>
+            </div>
+            <div class="cm-chest-tap" id="cmTapHint">👆 Нажми чтобы открыть</div>
+        </div>
+        <!-- Phase 2: Rewards -->
+        <div class="cm-rewards" id="cmPhase2">
+            <div style="font-size:1.1rem;font-weight:800;letter-spacing:.06em;text-transform:uppercase" id="cmRewardsTitle">Contents</div>
+            <div class="cm-reward-grid" id="cmRewardGrid"></div>
+            <button class="cm-got-btn" onclick="closeChestModal()">✨ Забрать!</button>
         </div>
     </div>
 </div>
@@ -189,6 +263,10 @@ const IS_PRO = <?= ($user && $user['is_pro']) ? 'true' : 'false' ?>;
 const ROOM_CODE = '<?= $roomCode ?? '' ?>';
 const USER_SKIN = '<?= $skin ?>';
 let GAME_ID = null; // Will be set after game is created in DB
+let gameStartTime = Date.now();
+let hadDoubleCapture = false;   // set true when player captures 2+ in one move
+let hadKingCapture   = false;   // set true when player captures a king
+let piecesLostCount  = 0;       // track own pieces lost during game
 
 // Init board
 const board = new BoardUI('gameBoard', {
@@ -382,19 +460,19 @@ function handleMove(move, engine) {
 
 
 function handleGameOver(engine) {
-    const modal = document.getElementById('gameOverModal');
+    const modal  = document.getElementById('gameOverModal');
     const trophy = document.getElementById('modalTrophy');
-    const title = document.getElementById('modalTitle');
-    const sub = document.getElementById('modalSub');
+    const title  = document.getElementById('modalTitle');
+    const sub    = document.getElementById('modalSub');
 
     const playerWon = engine.winner === P1;
     trophy.textContent = playerWon ? '🏆' : (engine.winner ? '😔' : '🤝');
-    title.textContent = playerWon ? 'Победа!' : (engine.winner ? 'Поражение' : 'Ничья');
-    sub.textContent = playerWon ? 'Великолепная игра! +32 к рейтингу' : 'Не сдавайся — следующий раз повезёт!';
+    title.textContent  = playerWon ? 'Победа!' : (engine.winner ? 'Поражение' : 'Ничья');
+    sub.textContent    = playerWon ? 'Великолепная игра!' : 'Не сдавайся — следующий раз повезёт!';
 
     // AI Coach (Pro feature)
     if (IS_PRO || MODE !== 'online') {
-        const insights = engine.analyzeGame();
+        const insights = engine.analyzeGame ? engine.analyzeGame() : [];
         if (insights.length > 0) {
             document.getElementById('aiCoachSection').style.display = 'block';
             const container = document.getElementById('coachInsights');
@@ -409,14 +487,190 @@ function handleGameOver(engine) {
 
     modal.classList.add('visible');
 
-    // Save result to server
+    // Save result + award XP + check achievements
     if (USER_ID) {
+        const durationSec = Math.floor((Date.now() - gameStartTime) / 1000);
         fetch('../api/end_game.php', {
             method: 'POST',
             headers: {'Content-Type':'application/json'},
-            body: JSON.stringify({ winner: engine.winner, mode: MODE })
-        });
+            body: JSON.stringify({
+                winner:              playerWon ? 1 : (engine.winner ? 0 : null),
+                mode:                MODE,
+                difficulty:          DIFFICULTY,
+                game_id:             GAME_ID,
+                duration_seconds:    durationSec,
+                no_pieces_lost:      playerWon && (piecesLostCount === 0),
+                had_double_capture:  hadDoubleCapture,
+                had_king_capture:    hadKingCapture,
+            })
+        })
+        .then(r => r.json())
+        .then(data => {
+            if (!data.success) return;
+
+            // XP feedback in modal
+            if (data.xp_gained > 0) {
+                const fb = document.getElementById('xpFeedback');
+                let txt = `⚡ +${data.xp_gained} XP`;
+                if (data.level_up) txt += ` · 🎉 Новый уровень: ${data.level_icon} ${data.level_name}!`;
+                document.getElementById('xpFeedbackText').textContent = txt;
+                fb.style.display = 'block';
+            }
+
+            // Achievement toasts (queue with delay)
+            if (data.new_achievements && data.new_achievements.length > 0) {
+                data.new_achievements.forEach((ach, i) => {
+                    setTimeout(() => showAchToast(ach), 800 + i * 1200);
+                });
+            }
+
+            // Chest earned button
+            if (data.chest_earned) {
+                pendingChest = data.chest_earned;
+                const fb = document.getElementById('xpFeedback');
+                const chestBtn = document.createElement('button');
+                chestBtn.id = 'chestEarnedBtn';
+                chestBtn.style.cssText = 'display:flex;align-items:center;gap:8px;width:100%;margin-top:12px;padding:13px 20px;background:linear-gradient(135deg,rgba(255,255,255,.08),rgba(255,255,255,.04));border:1px solid rgba(255,255,255,.15);border-radius:12px;color:#fff;font-family:Outfit,sans-serif;font-size:.95rem;font-weight:700;cursor:pointer;transition:.2s;justify-content:center';
+                chestBtn.style.setProperty('--cc', data.chest_earned.color);
+                chestBtn.onmouseenter = () => chestBtn.style.borderColor = data.chest_earned.color;
+                chestBtn.onmouseleave = () => chestBtn.style.borderColor = 'rgba(255,255,255,.15)';
+                chestBtn.innerHTML = `${data.chest_earned.emoji} Открыть ${data.chest_earned.name}!`;
+                chestBtn.onclick = () => { closeModal(); setTimeout(showChestModal, 300); };
+                fb.parentNode.insertBefore(chestBtn, fb.nextSibling);
+            }
+        })
+        .catch(() => {});
     }
+}
+
+function showAchToast(ach) {
+    const container = document.getElementById('achToastContainer');
+    const tierColors = {basic:'#10b981', advanced:'#f59e0b', hardcore:'#ef4444'};
+    const tierNames  = {basic:'Базовое', advanced:'Продвинутое', hardcore:'Хардкор'};
+
+    const toast = document.createElement('div');
+    toast.className = 'ach-toast';
+    toast.innerHTML = `
+        <span class="ach-toast-icon">${ach.icon}</span>
+        <div class="ach-toast-body">
+            <div class="ach-toast-label" style="color:${tierColors[ach.tier]||'var(--accent)'}">🏆 Достижение разблокировано · ${tierNames[ach.tier]||''}</div>
+            <div class="ach-toast-name">${ach.name}</div>
+            <div class="ach-toast-desc">${ach.description}</div>
+        </div>`;
+    container.appendChild(toast);
+
+    // Auto-dismiss after 5 s
+    setTimeout(() => {
+        toast.classList.add('out');
+        setTimeout(() => toast.remove(), 350);
+    }, 5000);
+}
+
+// ── Chest opening ──────────────────────────────────────────────────────────
+let pendingChest = null;
+let chestOpened  = false;
+
+function showChestModal() {
+    if (!pendingChest) return;
+    chestOpened = false;
+    const c = pendingChest;
+    const box = document.getElementById('cmBox');
+    box.style.setProperty('--cc',  c.color);
+    box.style.setProperty('--cc2', c.color);
+    document.getElementById('cmChestEmoji').textContent = c.emoji;
+    document.getElementById('cmChestName').textContent  = c.name;
+    document.getElementById('cmChestWrap').classList.remove('shaking','opening');
+    document.getElementById('cmPhase1').style.display   = 'block';
+    document.getElementById('cmPhase2').style.display   = 'none';
+    document.getElementById('cmRewardGrid').innerHTML   = '';
+    document.getElementById('cmTapHint').style.opacity  = '1';
+    document.getElementById('chestModal').classList.add('visible');
+}
+
+function tapChest() {
+    if (chestOpened || !pendingChest) return;
+    chestOpened = true;
+    const wrap = document.getElementById('cmChestWrap');
+    document.getElementById('cmTapHint').style.opacity = '0';
+    wrap.classList.add('shaking');
+    setTimeout(() => {
+        wrap.classList.remove('shaking');
+        wrap.classList.add('opening');
+        launchChestParticles(pendingChest.color);
+        fetch('../api/open_chest.php', {
+            method: 'POST',
+            headers: {'Content-Type':'application/json'},
+            body: JSON.stringify({ chest_id: pendingChest.id })
+        })
+        .then(r => r.json())
+        .then(data => { if (data.success) showRewards(data); })
+        .catch(() => { closeChestModal(); });
+    }, 600);
+}
+
+function showRewards(data) {
+    const typeLabels = { xp:'XP Бонус', skin:'Скин шашек', board_theme:'Тема доски', win_animation:'Анимация победы' };
+    document.getElementById('cmRewardsTitle').textContent = data.chest_meta.name + ' — Содержимое';
+    const grid = document.getElementById('cmRewardGrid');
+    data.rewards.forEach((r, i) => {
+        const row = document.createElement('div');
+        row.className = 'cm-reward-row';
+        row.style.animationDelay = (i * 0.13) + 's';
+        row.innerHTML = `<span class="cm-reward-icon">${r.icon}</span>
+            <div><div class="cm-reward-name">${r.name}</div>
+            <div class="cm-reward-type">${typeLabels[r.type] || r.type}</div></div>`;
+        grid.appendChild(row);
+    });
+    setTimeout(() => {
+        document.getElementById('cmPhase1').style.display = 'none';
+        document.getElementById('cmPhase2').style.display = 'flex';
+    }, 800);
+}
+
+function closeChestModal() {
+    document.getElementById('chestModal').classList.remove('visible');
+    stopChestParticles();
+    pendingChest = null;
+}
+
+// Chest particle burst
+let chestParticleRAF = null;
+function launchChestParticles(color) {
+    const canvas = document.getElementById('chestParticles');
+    canvas.width  = window.innerWidth;
+    canvas.height = window.innerHeight;
+    const ctx = canvas.getContext('2d');
+    const cx  = canvas.width / 2, cy = canvas.height / 2;
+    const palette = [color, '#ffffff', '#ffd700', '#fff8'];
+    const parts = Array.from({length: 80}, () => {
+        const angle = Math.random() * Math.PI * 2;
+        const speed = Math.random() * 12 + 5;
+        return { x:cx, y:cy, vx: Math.cos(angle)*speed, vy: Math.sin(angle)*speed - 4,
+                 size: Math.random()*9+3, color: palette[Math.floor(Math.random()*palette.length)],
+                 life: 1, decay: Math.random()*.015+.01, shape: Math.random()>.5?'rect':'circle' };
+    });
+    function draw() {
+        ctx.clearRect(0,0,canvas.width,canvas.height);
+        let alive = false;
+        parts.forEach(p => {
+            p.x += p.vx; p.y += p.vy; p.vy += .25; p.life -= p.decay;
+            if (p.life <= 0) return;
+            alive = true;
+            ctx.save(); ctx.globalAlpha = p.life; ctx.fillStyle = p.color;
+            ctx.translate(p.x, p.y);
+            if (p.shape === 'rect') ctx.fillRect(-p.size/2,-p.size/4,p.size,p.size/2);
+            else { ctx.beginPath(); ctx.arc(0,0,p.size/2,0,Math.PI*2); ctx.fill(); }
+            ctx.restore();
+        });
+        if (alive) chestParticleRAF = requestAnimationFrame(draw);
+    }
+    stopChestParticles();
+    draw();
+}
+function stopChestParticles() {
+    if (chestParticleRAF) { cancelAnimationFrame(chestParticleRAF); chestParticleRAF = null; }
+    const c = document.getElementById('chestParticles');
+    if (c) c.getContext('2d').clearRect(0,0,c.width,c.height);
 }
 
 function closeModal() {
