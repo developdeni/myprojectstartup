@@ -56,25 +56,56 @@ class CheckersEngine {
     _captures(r, c, board, turn, vis) {
         const piece = board[r][c];
         if (!piece) return [];
+        const isKing = this.isKing(piece);
         const res = [];
+
         for (const [dr,dc] of [[-1,-1],[-1,1],[1,-1],[1,1]]) {
-            const er=r+dr, ec=c+dc, lr=r+2*dr, lc=c+2*dc;
-            if (er<0||er>7||ec<0||ec>7||lr<0||lr>7||lc<0||lc>7) continue;
-            if (!this.enemy(board[er][ec], turn)) continue;
-            if (board[lr][lc]!==EMPTY) continue;
-            const key=`${er},${ec}`;
-            if (vis.has(key)) continue;
+            // Slide along diagonal to find an enemy piece
+            let er = r+dr, ec = c+dc;
+            // For regular pieces: enemy must be directly adjacent (only 1 step scan)
+            // For kings: scan along the full diagonal
+            let foundEnemy = false;
+            let enemyR = -1, enemyC = -1;
 
-            const nb=board.map(row=>[...row]);
-            nb[er][ec]=EMPTY; nb[r][c]=EMPTY; nb[lr][lc]=piece;
-            const nv=new Set(vis); nv.add(key);
+            while (er>=0 && er<=7 && ec>=0 && ec<=7) {
+                const cell = board[er][ec];
+                if (cell !== EMPTY) {
+                    if (this.enemy(cell, turn)) {
+                        // Found an enemy piece to jump over
+                        const key = `${er},${ec}`;
+                        if (!vis.has(key)) {
+                            foundEnemy = true;
+                            enemyR = er; enemyC = ec;
+                        }
+                    }
+                    break; // Blocked — stop scanning this direction
+                }
+                if (!isKing) break; // Regular pieces can only jump over adjacent enemies
+                er += dr; ec += dc;
+            }
 
-            const further=this._captures(lr,lc,nb,turn,nv);
-            if (further.length>0) {
-                for (const f of further)
-                    res.push({from:[r,c], to:f.to, captures:[[er,ec],...f.captures]});
-            } else {
-                res.push({from:[r,c], to:[lr,lc], captures:[[er,ec]]});
+            if (!foundEnemy) continue;
+
+            // Landing squares: all empty squares beyond the enemy piece
+            let lr = enemyR+dr, lc = enemyC+dc;
+            while (lr>=0 && lr<=7 && lc>=0 && lc<=7 && board[lr][lc]===EMPTY) {
+                const key = `${enemyR},${enemyC}`;
+                const nb = board.map(row=>[...row]);
+                nb[enemyR][enemyC] = EMPTY;
+                nb[r][c] = EMPTY;
+                nb[lr][lc] = piece;
+                const nv = new Set(vis); nv.add(key);
+
+                const further = this._captures(lr, lc, nb, turn, nv);
+                if (further.length > 0) {
+                    for (const f of further)
+                        res.push({from:[r,c], to:f.to, captures:[[enemyR,enemyC],...f.captures]});
+                } else {
+                    res.push({from:[r,c], to:[lr,lc], captures:[[enemyR,enemyC]]});
+                }
+
+                if (!isKing) break; // Regular piece lands on the first square only
+                lr += dr; lc += dc;
             }
         }
         return res;
@@ -89,13 +120,21 @@ class CheckersEngine {
     }
 
     _simple(r, c, turn) {
-        const piece=this.board[r][c]; if(!piece) return [];
-        const fwd=turn===P1?-1:1;
-        const dirs=this.isKing(piece)?[[-1,-1],[-1,1],[1,-1],[1,1]]:[[fwd,-1],[fwd,1]];
-        return dirs
-            .map(([dr,dc])=>[r+dr,c+dc])
-            .filter(([nr,nc])=>nr>=0&&nr<=7&&nc>=0&&nc<=7&&this.board[nr][nc]===EMPTY)
-            .map(([nr,nc])=>({from:[r,c],to:[nr,nc],captures:[]}));
+        const piece = this.board[r][c]; if(!piece) return [];
+        const isKing = this.isKing(piece);
+        const fwd = turn===P1 ? -1 : 1;
+        const dirs = isKing ? [[-1,-1],[-1,1],[1,-1],[1,1]] : [[fwd,-1],[fwd,1]];
+        const moves = [];
+
+        for (const [dr,dc] of dirs) {
+            let nr = r+dr, nc = c+dc;
+            while (nr>=0 && nr<=7 && nc>=0 && nc<=7 && this.board[nr][nc]===EMPTY) {
+                moves.push({from:[r,c], to:[nr,nc], captures:[]});
+                if (!isKing) break; // Regular piece: only 1 step
+                nr += dr; nc += dc;
+            }
+        }
+        return moves;
     }
 
     /* ── Apply move ──────────────────────────────────── */
